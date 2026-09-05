@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.schemas.github import GithubRepositoryResponse,GithubCommitResponse,GithubCommitDetailResponse,GithubCommitFileResponse,GithubBranchesResponse,GithubCommitFileContentResponse,GithubBranchResponse,GithubContributorResponse,GithubPullRequestListResponse,GithubPullRequestDetailResponse,GithubPullRequestFileResponse
 from app.agents.pr_risk.graph import build_pr_risk_graph
 from app.agents.pr_risk.context import PRRiskContext
+from app.agents.pr_risk.schema import PRRiskAnalysisResponse
 router = APIRouter(
     prefix="/teams/{team_id}/projects/{project_id}/github",
     tags=["GitHub"],
@@ -271,14 +272,15 @@ async def get_pull_requests(
     ]
 
     return files
-@router.get("/repository/pull/{pull_number}/risk-analysis")
+@router.get("/repository/pull/{pull_number}/risk-analysis",response_model=PRRiskAnalysisResponse)
 async def analysis_pull_request(
     team_id:UUID,
     project_id:UUID,
     pull_number:int,
     db:AsyncSession = Depends(get_db),
     membership = Depends(require_team_role("OWNER","ADMIN","MEMBER")),
-    current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user),
+    
 ):
     graph = build_pr_risk_graph() 
     initial_state = {
@@ -293,4 +295,11 @@ async def analysis_pull_request(
         initial_state,
         context=context
     )
-    return result 
+    return {
+    "pull_request": {
+        "number": pull_number,
+        "title": result["pr_data"]["title"],
+        "url": result["pr_data"]["html_url"],
+    },
+    "analysis": result["risk_analysis"],
+}
