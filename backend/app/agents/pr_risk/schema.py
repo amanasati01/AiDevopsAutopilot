@@ -12,7 +12,7 @@ class Recommendation(BaseModel):
     description: str
 
 
-class PRRiskAnalysis(BaseModel):
+class PRRiskAnalysisOutput(BaseModel):
     risk_level: Literal["LOW", "MEDIUM", "HIGH"]
     risk_score: int = Field(ge=0, le=10)
     summary: str
@@ -22,4 +22,4 @@ class PRRiskAnalysis(BaseModel):
     recommendation: list[Recommendation]
 class PRRiskAnalysisResponse(BaseModel):
     pull_request: dict
-    analysis: PRRiskAnalysis
+    analysis:list[PRRiskAnalysisOutput]

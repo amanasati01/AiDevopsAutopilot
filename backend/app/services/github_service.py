@@ -12,7 +12,7 @@ async def extract_github_repo(repo_url:str)->tuple[str,str]:
     repo = parts[-1]
     return owner,repo
 async def get_project_repository_data(url:str):
-    owner, repo = extract_github_repo(url)
+    owner, repo =await extract_github_repo(url)
     github_client  = GithubClient()
     repository_data = await github_client.get_repository(owner,repo)
     return repository_data

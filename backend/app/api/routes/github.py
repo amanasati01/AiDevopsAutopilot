@@ -9,6 +9,9 @@ from app.schemas.github import GithubRepositoryResponse,GithubCommitResponse,Git
 from app.agents.pr_risk.graph import build_pr_risk_graph
 from app.agents.pr_risk.context import PRRiskContext
 from app.agents.pr_risk.schema import PRRiskAnalysisResponse
+from app.models.pr_risk_analysis import PRRiskAnalysis
+from app.repositories.pr_risk_analysis_repository import pr_risk_analysis_repository
+from fastapi import HTTPException
 router = APIRouter(
     prefix="/teams/{team_id}/projects/{project_id}/github",
     tags=["GitHub"],
@@ -272,7 +275,7 @@ async def get_pull_requests(
     ]
 
     return files
-@router.get("/repository/pull/{pull_number}/risk-analysis",response_model=PRRiskAnalysisResponse)
+@router.post("/repository/pull/{pull_number}/risk-analysis",response_model=PRRiskAnalysisResponse)
 async def analysis_pull_request(
     team_id:UUID,
     project_id:UUID,
@@ -295,6 +298,22 @@ async def analysis_pull_request(
         initial_state,
         context=context
     )
+    analysis = result["risk_analysis"]
+    pr_risk_analysis = PRRiskAnalysis(
+        team_id = team_id,
+        project_id = project_id,
+        pull_number = pull_number,
+        risk_level = analysis["risk_level"],
+        risk_score = analysis["risk_score"],
+        summary = analysis["summary"],
+        security_concerns = analysis["security_concerns"],
+        breaking_changes = analysis["breaking_changes"],
+        risks = analysis["risk"],
+        recommendations = analysis["recommendation"],   
+    )
+    db.add(pr_risk_analysis)
+    await db.commit()
+    await db.refresh(pr_risk_analysis)
     return {
     "pull_request": {
         "number": pull_number,
@@ -303,3 +322,96 @@ async def analysis_pull_request(
     },
     "analysis": result["risk_analysis"],
 }
+@router.get("/repository/pull/{pull_number}/risk-analysis/history",response_model=PRRiskAnalysisResponse)
+async def get_latest_pr_analysis(
+    team_id: UUID,
+    project_id: UUID,
+    pull_number: int,
+    db: AsyncSession = Depends(get_db),
+    membership=Depends(require_team_role("OWNER", "ADMIN", "MEMBER")),
+    current_user=Depends(get_current_user),
+):
+    repo = pr_risk_analysis_repository(db)
+
+    analysis_list = await repo.get_by_pull_number(
+        team_id,
+        project_id,
+        pull_number,
+    )
+
+    if not analysis_list:
+        raise HTTPException(
+            status_code=404,
+            detail="No risk analysis found for this pull request",
+        )
+
+    analyses = []
+
+    for analysis in analysis_list:
+        analyses.append({
+            "id": str(analysis.id),
+            "team_id": str(analysis.team_id),
+            "project_id": str(analysis.project_id),
+            "pull_number": analysis.pull_number,
+            "risk_level": analysis.risk_level,
+            "risk_score": analysis.risk_score,
+            "summary": analysis.summary,
+            "security_concerns": analysis.security_concerns,
+            "breaking_changes": analysis.breaking_changes,
+            "risk": analysis.risks,
+            "recommendation": analysis.recommendations,
+            "created_at": analysis.created_at,
+            "updated_at": analysis.updated_at,
+        })
+
+    return {
+        "pull_request": {
+            "number": pull_number,
+        },
+        "analysis": analyses,
+    }
+@router.get("/repository/pull/{pull_number}/risk-analysis",response_model=PRRiskAnalysisResponse)
+async def get_latest_pr_analysis(
+    team_id: UUID,
+    project_id: UUID,
+    pull_number: int,
+    db: AsyncSession = Depends(get_db),
+    membership=Depends(require_team_role("OWNER", "ADMIN", "MEMBER")),
+    current_user=Depends(get_current_user),
+):
+    repo = pr_risk_analysis_repository(db)
+
+    analysis_list = await repo.get_by_pull_number(
+        team_id,
+        project_id,
+        pull_number,
+    )
+
+    if not analysis_list:
+        raise HTTPException(
+            status_code=404,
+            detail="No risk analysis found for this pull request",
+        )
+
+    analyses = []
+    analysis = analysis_list[-1]
+    return {
+        "pull_request": {
+            "number": pull_number,
+        },
+        "analysis": [{
+            "id": str(analysis.id),
+            "team_id": str(analysis.team_id),
+            "project_id": str(analysis.project_id),
+            "pull_number": analysis.pull_number,
+            "risk_level": analysis.risk_level,
+            "risk_score": analysis.risk_score,
+            "summary": analysis.summary,
+            "security_concerns": analysis.security_concerns,
+            "breaking_changes": analysis.breaking_changes,
+            "risk": analysis.risks,
+            "recommendation": analysis.recommendations,
+            "created_at": analysis.created_at,
+            "updated_at": analysis.updated_at,
+            }],
+    }

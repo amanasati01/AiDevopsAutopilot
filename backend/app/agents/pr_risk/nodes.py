@@ -3,7 +3,7 @@ from langchain_core.messages import HumanMessage
 from .state import PRRiskState
 from langgraph.runtime import Runtime
 from .context import PRRiskContext
-from .schema import PRRiskAnalysis
+from .schema import PRRiskAnalysisOutput
 from app.services.github_service import (
     get_project_github_repository_pull_request,
     get_project_github_repository_pull_request_files,
@@ -13,7 +13,7 @@ llm = ChatOpenAI(
     model="gpt-4o-mini",
     temperature=0
 )
-structured_llm = llm.with_structured_output(PRRiskAnalysis)
+structured_llm = llm.with_structured_output(PRRiskAnalysisOutput)
 async def analyse_pr(state:PRRiskState)->dict:
     pr_data = state["pr_data"]
     pr_files = state["pr_files"]
